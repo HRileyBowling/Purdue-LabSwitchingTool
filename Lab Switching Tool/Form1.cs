@@ -17,8 +17,7 @@ namespace Lab_Switching_Tool
         public Form1()
         {
             InitializeComponent();
-            SwitchToITAP();
-            cboLab.SelectedIndex = 0;
+            LabDetect();
         }
 
         // Global constants
@@ -33,6 +32,7 @@ namespace Lab_Switching_Tool
         // Glabal variables
         bool firstOpen = true;
         bool ItapMode = true;
+        string lastSelected = "Unl!k3lyString☺";
 
         // Display functions
         private void cboLab_SelectedIndexChanged(object sender, EventArgs e)
@@ -41,24 +41,9 @@ namespace Lab_Switching_Tool
             dtpSelectedDate.Update();
             lblLastUpdated.Visible = false; lblLastUpdated.Update();
             firstOpen = true;
-            bool wasSwitched = false;
-            if ((string)cboLab.SelectedItem == "[Show ALL Labs]")
-            {
-                SwitchToALL();
-                cboLab.SelectedIndex = 0;
-                wasSwitched = true;
-            }
-            if ((string)cboLab.SelectedItem == "[Show ITaP Labs]")
-            {
-                SwitchToITAP();
-                cboLab.SelectedIndex = 0;
-                wasSwitched = true;
-            }
-            if (wasSwitched == true)
-            {
-                txtOutput.Clear();
-                return;
-            }
+            if ((string)cboLab.SelectedItem == "[Show ALL Labs]") SwitchToALL();
+            if ((string)cboLab.SelectedItem == "[Show ITaP Labs]") SwitchToITAP();
+            lastSelected = (string)cboLab.SelectedItem;
             if (cboLab.SelectedIndex == 0)
             {
                 txtOutput.Clear();
@@ -74,8 +59,6 @@ namespace Lab_Switching_Tool
             int pad = (PadAmount - header.Length) / 2 ;
             txtOutput.Text = " ".PadLeft(pad, headerChar) + header + " ".PadRight(pad, headerChar) + "\r\n" + txtOutput.Text;
             StandardizeTxtBox();
-            txtOutput.Focus();
-            txtOutput.SelectionStart = txtOutput.Text.Length;
 
             //Last Updated
             lblLastUpdated.Visible = true;
@@ -91,6 +74,8 @@ namespace Lab_Switching_Tool
                 txtNow.Clear();
                 lblLastUpdated.Visible = false;
             }
+            this.ActiveControl = txtOutput;
+            txtOutput.SelectionStart = txtOutput.Text.Length;
         }
 
         public void Display(string building, string[] Rooms)
@@ -193,87 +178,6 @@ namespace Lab_Switching_Tool
             else if ((string)cboLab.SelectedItem == "WTHR" && ItapMode == false) Rooms = new string[] { "114", "212", "214", "305", "307" };
             else if ((string)cboLab.SelectedItem == "WTHR" && ItapMode == true) Rooms = new string[] { "114", "212", "214" };
             return Rooms;
-        }
-        
-        // Print variables
-        private Font printFont;
-        private StreamReader streamToPrint;
-        
-        // Print function
-        private void btnPrint_Click(Object sender, EventArgs e)
-        {
-            if (txtOutput.Text != "")
-            {
-                File.WriteAllText(Application.StartupPath + "LastPrinted.txt", txtOutput.Text);
-                try
-                {
-                    streamToPrint = new StreamReader
-                       (Application.StartupPath + "LastPrinted.txt");
-                    try
-                    {
-                        printFont = new Font("Courier New", 12);
-                        PrintDocument pd = new PrintDocument();
-                        pd.DocumentName = (string)cboLab.SelectedItem + " " + GetDay(dtpSelectedDate.Value);
-                        pd.PrintPage += new PrintPageEventHandler
-                           (this.pd_PrintPage);
-
-                        try
-                        {
-                            PrintDialog PrintD = new PrintDialog();
-                            if (PrintD.ShowDialog() == DialogResult.OK)
-                            {
-                                pd.Print();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new Exception("Exception Occured While Printing", ex);
-                        }
-                    }
-                    finally
-                    {
-                        streamToPrint.Close();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message);
-                }
-            }
-            else MessageBox.Show("Detected blank document. Print Aborted");
-        }
-
-        private void pd_PrintPage(object sender, PrintPageEventArgs ev)
-        {
-            float linesPerPage = 0;
-            float yPos = 0;
-            int count = 0;
-            float leftMargin = ev.MarginBounds.Left;
-            float topMargin = ev.MarginBounds.Top;
-            string line = null;
-
-            // Calculate the number of lines per page.
-            linesPerPage = ev.MarginBounds.Height / printFont.GetHeight(ev.Graphics);
-
-            // Print each line of the file.
-            while (count < linesPerPage && ((line = streamToPrint.ReadLine()) != null))
-            {
-                if (line != "")
-                {
-                    yPos = topMargin + (count * printFont.GetHeight(ev.Graphics));
-                    StringFormat format = new StringFormat(StringFormatFlags.LineLimit);
-                    float[] formatTabs = { 100.0f, 123.0f };
-                    format.SetTabStops(0.0f, formatTabs);
-                    ev.Graphics.DrawString(line, printFont, Brushes.Black, leftMargin, yPos, format);
-                    count++;
-                }
-            }
-
-            // If more lines exist, print another page.
-            if (line != null)
-                ev.HasMorePages = true;
-            else
-                ev.HasMorePages = false;
         }
 
         // Data manipulation functions
@@ -454,6 +358,9 @@ namespace Lab_Switching_Tool
             cboLab.Items.Add("STEW");
             cboLab.Items.Add("WTHR");
             cboLab.Items.Add("[Show ALL Labs]");
+            if (cboLab.Items.Contains(lastSelected))
+                cboLab.SelectedItem = lastSelected;
+            else cboLab.SelectedIndex = 0;
             ItapMode = true;
         }
         public void SwitchToALL()
@@ -485,7 +392,113 @@ namespace Lab_Switching_Tool
             cboLab.Items.Add("TERM");
             cboLab.Items.Add("WTHR");
             cboLab.Items.Add("[Show ITaP Labs]");
+            cboLab.SelectedItem = lastSelected;
             ItapMode = false;
+        }
+
+        // Lab Auto detect funtion
+        public void LabDetect()
+        {
+            SwitchToALL();
+            string labname = "";
+            string MachineName = "BRNG";//Environment.MachineName;
+            string currentLab;
+            bool found = false;
+            for (int count = 1; count <= cboLab.Items.Count - 2 && found == false; count++)
+            {
+                currentLab = cboLab.Items[count].ToString();
+                if (MachineName.IndexOf(currentLab) != -1)
+                { labname = currentLab; found = true; }
+            }
+            if (found)
+            {
+                SwitchToITAP();
+                if (cboLab.Items.Contains(labname) == false)
+                    SwitchToALL();
+                cboLab.SelectedItem = labname;
+            }
+            else cboLab.SelectedIndex = 0;
+        }
+
+        // Print variables
+        private Font printFont;
+        private StreamReader streamToPrint;
+
+        // Print function and event handler
+        private void btnPrint_Click(Object sender, EventArgs e)
+        {
+            if (txtOutput.Text != "")
+            {
+                File.WriteAllText(Application.StartupPath + "LastPrinted.txt", txtOutput.Text);
+                try
+                {
+                    streamToPrint = new StreamReader
+                       (Application.StartupPath + "LastPrinted.txt");
+                    try
+                    {
+                        printFont = new Font("Courier New", 12);
+                        PrintDocument pd = new PrintDocument();
+                        pd.DocumentName = (string)cboLab.SelectedItem + " " + GetDay(dtpSelectedDate.Value);
+                        pd.PrintPage += new PrintPageEventHandler
+                           (this.pd_PrintPage);
+
+                        try
+                        {
+                            PrintDialog PrintD = new PrintDialog();
+                            if (PrintD.ShowDialog() == DialogResult.OK)
+                            {
+                                pd.Print();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception("Exception Occured While Printing", ex);
+                        }
+                    }
+                    finally
+                    {
+                        streamToPrint.Close();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message);
+                }
+            }
+            else MessageBox.Show("Detected blank document. Print Aborted");
+        }
+
+        private void pd_PrintPage(object sender, PrintPageEventArgs ev)
+        {
+            float linesPerPage = 0;
+            float yPos = 0;
+            int count = 0;
+            float leftMargin = ev.MarginBounds.Left;
+            float topMargin = ev.MarginBounds.Top;
+            string line = null;
+
+            // Calculate the number of lines per page.
+            linesPerPage = ev.MarginBounds.Height / printFont.GetHeight(ev.Graphics);
+
+            // Print each line of the file.
+            while (count < linesPerPage && ((line = streamToPrint.ReadLine()) != null))
+            {
+                if (line != "")
+                {
+                    yPos = topMargin + (count * printFont.GetHeight(ev.Graphics));
+                    StringFormat format = new StringFormat(StringFormatFlags.LineLimit);
+                    float[] formatTabs = { 100.0f, 123.0f };
+                    format.SetTabStops(0.0f, formatTabs);
+                    ev.Graphics.DrawString(line, printFont, Brushes.Black, leftMargin, yPos, format);
+                    count++;
+                }
+            }
+
+            // If more lines exist, print another page.
+            if (line != null)
+                ev.HasMorePages = true;
+            else
+                ev.HasMorePages = false;
         }
     }
 }
