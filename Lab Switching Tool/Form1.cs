@@ -401,7 +401,7 @@ namespace Lab_Switching_Tool
         {
             SwitchToALL();
             string labname = "";
-            string MachineName = "BRNG";//Environment.MachineName;
+            string MachineName = Environment.MachineName;
             string currentLab;
             bool found = false;
             for (int count = 1; count <= cboLab.Items.Count - 2 && found == false; count++)
